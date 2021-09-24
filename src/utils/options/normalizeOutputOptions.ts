@@ -38,6 +38,7 @@ export function normalizeOutputOptions(
 		assetFileNames: config.assetFileNames ?? 'assets/[name]-[hash][extname]',
 		banner: getAddon(config, 'banner'),
 		chunkFileNames: config.chunkFileNames ?? '[name]-[hash].js',
+		chunkHashLength: config.chunkHashLength ?? 8,
 		compact,
 		dir: getDir(config, file),
 		dynamicImportFunction: getDynamicImportFunction(config, inputOptions),

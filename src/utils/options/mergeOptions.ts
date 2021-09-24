@@ -216,6 +216,7 @@ function mergeOutputOptions(
 		assetFileNames: getOption('assetFileNames'),
 		banner: getOption('banner'),
 		chunkFileNames: getOption('chunkFileNames'),
+		chunkHashLength: getOption('chunkHashLength'),
 		compact: getOption('compact'),
 		dir: getOption('dir'),
 		dynamicImportFunction: getOption('dynamicImportFunction'),

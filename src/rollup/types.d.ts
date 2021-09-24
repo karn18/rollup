@@ -634,6 +634,7 @@ export interface OutputOptions {
 	assetFileNames?: string | ((chunkInfo: PreRenderedAsset) => string);
 	banner?: string | (() => string | Promise<string>);
 	chunkFileNames?: string | ((chunkInfo: PreRenderedChunk) => string);
+	chunkHashLength?: number;
 	compact?: boolean;
 	// only required for bundle.write
 	dir?: string;
@@ -683,6 +684,7 @@ export interface NormalizedOutputOptions {
 	assetFileNames: string | ((chunkInfo: PreRenderedAsset) => string);
 	banner: () => string | Promise<string>;
 	chunkFileNames: string | ((chunkInfo: PreRenderedChunk) => string);
+	chunkHashLength?: number;
 	compact: boolean;
 	dir: string | undefined;
 	/** @deprecated Use the "renderDynamicImport" plugin hook instead. */

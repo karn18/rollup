@@ -877,7 +877,7 @@ export default class Chunk {
 				dependenciesForHashing.add(dependency);
 			}
 		}
-		return hash.digest('hex').substr(0, 8);
+		return hash.digest('hex').substr(0, options.chunkHashLength);
 	}
 
 	private ensureReexportsAreAvailableForModule(module: Module) {
