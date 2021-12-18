@@ -46,6 +46,7 @@ import {
 	TransformModuleJSON
 } from './rollup/types';
 import { EMPTY_OBJECT } from './utils/blank';
+import { BuildPhase } from './utils/buildPhase';
 import {
 	augmentCodeLocation,
 	errAmbiguousExternalNamespaces,
@@ -99,6 +100,7 @@ export interface AstContext {
 	getExports: () => string[];
 	getModuleExecIndex: () => number;
 	getModuleName: () => string;
+	getNodeConstructor: (name: string) => typeof NodeBase;
 	getReexports: () => string[];
 	importDescriptions: { [name: string]: ImportDescription };
 	includeAllExports: () => void;
@@ -107,7 +109,6 @@ export interface AstContext {
 	magicString: MagicString;
 	module: Module; // not to be used for tree-shaking
 	moduleContext: string;
-	nodeConstructors: { [name: string]: typeof NodeBase };
 	options: NormalizedInputOptions;
 	requestTreeshakingPass: () => void;
 	traceExport: (name: string) => Variable | null;
@@ -215,7 +216,7 @@ export default class Module {
 	needsExportShim = false;
 	declare originalCode: string;
 	declare originalSourcemap: ExistingDecodedSourceMap | null;
-	preserveSignature: PreserveEntrySignaturesOption = this.options.preserveEntrySignatures;
+	preserveSignature: PreserveEntrySignaturesOption;
 	reexportDescriptions: { [name: string]: ReexportDescription } = Object.create(null);
 	declare resolvedIds: ResolvedIdMap;
 	declare scope: ModuleScope;
@@ -252,6 +253,7 @@ export default class Module {
 	) {
 		this.excludeFromSourcemap = /\0/.test(id);
 		this.context = options.moduleContext(id);
+		this.preserveSignature = this.options.preserveEntrySignatures;
 
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const module = this;
@@ -273,19 +275,25 @@ export default class Module {
 			hasModuleSideEffects,
 			id,
 			get implicitlyLoadedAfterOneOf() {
-				return Array.from(module.implicitlyLoadedAfter, getId);
+				return Array.from(module.implicitlyLoadedAfter, getId).sort();
 			},
 			get implicitlyLoadedBefore() {
-				return Array.from(module.implicitlyLoadedBefore, getId);
+				return Array.from(module.implicitlyLoadedBefore, getId).sort();
 			},
 			get importedIds() {
-				return Array.from(module.sources, source => module.resolvedIds[source].id);
+				return Array.from(module.sources, source => module.resolvedIds[source]?.id).filter(Boolean);
 			},
 			get importers() {
 				return module.importers.sort();
 			},
 			isEntry,
 			isExternal: false,
+			get isIncluded() {
+				if (module.graph.phase !== BuildPhase.GENERATE) {
+					return null;
+				}
+				return module.isIncluded();
+			},
 			meta,
 			syntheticNamedExports
 		};
@@ -724,6 +732,7 @@ export default class Module {
 			getExports: this.getExports.bind(this),
 			getModuleExecIndex: () => this.execIndex,
 			getModuleName: this.basename.bind(this),
+			getNodeConstructor: (name: string) => nodeConstructors[name] || nodeConstructors.UnknownNode,
 			getReexports: this.getReexports.bind(this),
 			importDescriptions: this.importDescriptions,
 			includeAllExports: () => this.includeAllExports(true),
@@ -732,7 +741,6 @@ export default class Module {
 			magicString: this.magicString,
 			module: this,
 			moduleContext: this.context,
-			nodeConstructors,
 			options: this.options,
 			requestTreeshakingPass: () => (this.graph.needsTreeshakingPass = true),
 			traceExport: this.getVariableForExportName.bind(this),
