@@ -1,15 +1,15 @@
 import Variable from '../ast/variables/Variable';
+import RESERVED_NAMES from './RESERVED_NAMES';
 import { toBase64 } from './base64';
-import { RESERVED_NAMES } from './reservedNames';
 
 export function assignExportsToMangledNames(
-	exports: Set<Variable>,
+	exports: ReadonlySet<Variable>,
 	exportsByName: Record<string, Variable>,
 	exportNamesByVariable: Map<Variable, string[]>
 ): void {
 	let nameIndex = 0;
 	for (const variable of exports) {
-		let exportName = variable.name[0];
+		let [exportName] = variable.name;
 		if (exportsByName[exportName]) {
 			do {
 				exportName = toBase64(++nameIndex);
@@ -26,7 +26,7 @@ export function assignExportsToMangledNames(
 }
 
 export function assignExportsToNames(
-	exports: Set<Variable>,
+	exports: ReadonlySet<Variable>,
 	exportsByName: Record<string, Variable>,
 	exportNamesByVariable: Map<Variable, string[]>
 ): void {

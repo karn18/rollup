@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const fixturify = require('fixturify');
 const sander = require('sander');
@@ -14,6 +15,10 @@ exports.runTestSuiteWithSamples = runTestSuiteWithSamples;
 exports.assertDirectoriesAreEqual = assertDirectoriesAreEqual;
 exports.assertFilesAreEqual = assertFilesAreEqual;
 exports.assertIncludes = assertIncludes;
+exports.atomicWriteFileSync = atomicWriteFileSync;
+exports.writeAndSync = writeAndSync;
+exports.getFileNamesAndRemoveOutput = getFileNamesAndRemoveOutput;
+exports.writeAndRetry = writeAndRetry;
 
 function normaliseError(error) {
 	delete error.stack;
@@ -219,4 +224,41 @@ function assertIncludes(actual, expected) {
 		err.expected = expected;
 		throw err;
 	}
+}
+
+// Workaround a race condition in fs.writeFileSync that temporarily creates
+// an empty file for a brief moment which may be read by rollup watch - even
+// if the content being overwritten is identical.
+function atomicWriteFileSync(filePath, contents) {
+	const stagingPath = filePath + '_';
+	fs.writeFileSync(stagingPath, contents);
+	fs.renameSync(stagingPath, filePath);
+}
+
+// It appears that on MacOS, it sometimes takes long for the file system to update
+function writeAndSync(filePath, contents) {
+	const file = fs.openSync(filePath, 'w');
+	fs.writeSync(file, contents);
+	fs.fsyncSync(file);
+	fs.closeSync(file);
+}
+
+// Sometimes, watchers on MacOS do not seem to fire. In those cases, it helps
+// to write the same content again. This function returns a callback to stop
+// further updates.
+function writeAndRetry(filePath, contents) {
+	let retries = 0;
+	let updateRetryTimeout;
+
+	const writeFile = () => {
+		if (retries > 0) {
+			console.error(`RETRIED writeFile (${retries})`);
+		}
+		retries++;
+		atomicWriteFileSync(filePath, contents);
+		updateRetryTimeout = setTimeout(writeFile, 1000);
+	};
+
+	writeFile();
+	return () => clearTimeout(updateRetryTimeout);
 }

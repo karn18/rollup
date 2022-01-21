@@ -102,7 +102,7 @@ Notifies a plugin when watcher process closes and all open resources should be c
 
 #### `load`
 
-**Type:** `(id: string) => string | null | {code: string, map?: string | SourceMap, ast? : ESTree.Program, moduleSideEffects?: boolean | "no-treeshake" | null, syntheticNamedExports?: boolean | string | null, meta?: {[plugin: string]: any} | null}`<br> **Kind:** `async, first`<br> **Previous Hook:** [`resolveId`](guide/en/#resolveid) or [`resolveDynamicImport`](guide/en/#resolvedynamicimport) where the loaded id was resolved. Additionally, this hook can be triggered at any time from plugin hooks by calling [`this.load`](guide/en/#thisload) to preload the module corresponding to an id.<br> **Next Hook:** [`transform`](guide/en/#transform) to transform the loaded file.
+**Type:** `(id: string) => string | null | {code: string, map?: string | SourceMap, ast? : ESTree.Program, moduleSideEffects?: boolean | "no-treeshake" | null, syntheticNamedExports?: boolean | string | null, meta?: {[plugin: string]: any} | null}`<br> **Kind:** `async, first`<br> **Previous Hook:** [`resolveId`](guide/en/#resolveid) or [`resolveDynamicImport`](guide/en/#resolvedynamicimport) where the loaded id was resolved. Additionally, this hook can be triggered at any time from plugin hooks by calling [`this.load`](guide/en/#thisload) to preload the module corresponding to an id.<br> **Next Hook:** [`transform`](guide/en/#transform) to transform the loaded file if no cache was used, or there was no cached copy with the same `code`, otherwise [`shouldTransformCachedModule`](guide/en/#shouldtransformcachedmodule).
 
 Defines a custom loader. Returning `null` defers to other `load` functions (and eventually the default behavior of loading from the file system). To prevent additional parsing overhead in case e.g. this hook already used `this.parse` to generate an AST for some reason, this hook can optionally return a `{ code, ast, map }` object. The `ast` must be a standard ESTree AST with `start` and `end` properties for each node. If the transformation does not move code, you can preserve existing sourcemaps by setting `map` to `null`. Otherwise you might need to generate the source map. See [the section on source code transformations](#source-code-transformations).
 
@@ -116,13 +116,13 @@ You can use [`this.getModuleInfo`](guide/en/#thisgetmoduleinfo) to find out the 
 
 #### `moduleParsed`
 
-**Type:** `(moduleInfo: ModuleInfo) => void`<br> **Kind:** `async, parallel`<br> **Previous Hook:** [`transform`](guide/en/#transform) where the currently handled file was transformed.<br> NextHook: [`resolveId`](guide/en/#resolveid) and [`resolveDynamicImport`](guide/en/#resolvedynamicimport) to resolve all discovered static and dynamic imports in parallel if present, otherwise [`buildEnd`](guide/en/#buildend).
+**Type:** `(moduleInfo: ModuleInfo) => void`<br> **Kind:** `async, parallel`<br> **Previous Hook:** [`transform`](guide/en/#transform) where the currently handled file was transformed.<br> **Next Hook:** [`resolveId`](guide/en/#resolveid) and [`resolveDynamicImport`](guide/en/#resolvedynamicimport) to resolve all discovered static and dynamic imports in parallel if present, otherwise [`buildEnd`](guide/en/#buildend).
 
 This hook is called each time a module has been fully parsed by Rollup. See [`this.getModuleInfo`](guide/en/#thisgetmoduleinfo) for what information is passed to this hook.
 
 In contrast to the [`transform`](guide/en/#transform) hook, this hook is never cached and can be used to get information about both cached and other modules, including the final shape of the `meta` property, the `code` and the `ast`.
 
-This hook will wait until all imports are resolved so that the information in `moduleInfo.importedIds` and `moduleInfo.dynamicallyImportedIds` is complete and accurate. Note however that information about importing modules may be incomplete as additional importers could be discovered later. If you need this information, use the [`buildEnd`](guide/en/#buildend) hook.
+This hook will wait until all imports are resolved so that the information in `moduleInfo.importedIds`, `moduleInfo.dynamicallyImportedIds`, `moduleInfo.importedIdResolutions`, and `moduleInfo.dynamicallyImportedIdResolutions` is complete and accurate. Note however that information about importing modules may be incomplete as additional importers could be discovered later. If you need this information, use the [`buildEnd`](guide/en/#buildend) hook.
 
 #### `options`
 
@@ -222,9 +222,19 @@ Note that while `resolveId` will be called for each import of a module and can t
 
 When triggering this hook from a plugin via [`this.resolve`](guide/en/#thisresolve), it is possible to pass a custom options object to this hook. While this object will be passed unmodified, plugins should follow the convention of adding a `custom` property with an object where the keys correspond to the names of the plugins that the options are intended for. For details see [custom resolver options](guide/en/#custom-resolver-options).
 
+#### `shouldTransformCachedModule`
+
+**Type:** `({id: string, code: string, ast: ESTree.Program, meta: {[plugin: string]: any}, moduleSideEffects: boolean | "no-treeshake", syntheticNamedExports: string | boolean}) => boolean`<br> **Kind:** `async, first`<br> **Previous Hook:** [`load`](guide/en/#load) where the cached file was loaded to compare its code with the cached version.<br> **Next Hook:** [`moduleParsed`](guide/en/#moduleparsed) if no plugin returns `true`, otherwise [`transform`](guide/en/#transform).
+
+If the Rollup cache is used (e.g. in watch mode or explicitly via the JavaScript API), Rollup will skip the [`transform`](guide/en/#transform) hook of a module if after the [`load`](guide/en/#transform) hook, the loaded `code` is identical to the code of the cached copy. To prevent this, discard the cached copy and instead transform a module, plugins can implement this hook and return `true`.
+
+This hook can also be used to find out which modules were cached and access their cached meta information.
+
+If a plugin does not return `true`, Rollup will trigger this hook for other plugins, otherwise all remaining plugins will be skipped.
+
 #### `transform`
 
-**Type:** `(code: string, id: string) => string | null | {code?: string, map?: string | SourceMap, ast? : ESTree.Program, moduleSideEffects?: boolean | "no-treeshake" | null, syntheticNamedExports?: boolean | string | null, meta?: {[plugin: string]: any} | null}`<br> **Kind:** `async, sequential`<br> **Previous Hook:** [`load`](guide/en/#load) where the currently handled file was loaded.<br> NextHook: [`moduleParsed`](guide/en/#moduleparsed) once the file has been processed and parsed.
+**Type:** `(code: string, id: string) => string | null | {code?: string, map?: string | SourceMap, ast? : ESTree.Program, moduleSideEffects?: boolean | "no-treeshake" | null, syntheticNamedExports?: boolean | string | null, meta?: {[plugin: string]: any} | null}`<br> **Kind:** `async, sequential`<br> **Previous Hook:** [`load`](guide/en/#load) where the currently handled file was loaded. If caching is used and there was a cached copy of that module, [`shouldTransformCachedModule`](guide/en/#shouldtransformcachedmodule) if a plugin returned `true` for that hook.<br> **Next Hook:** [`moduleParsed`](guide/en/#moduleparsed) once the file has been processed and parsed.
 
 Can be used to transform individual modules. To prevent additional parsing overhead in case e.g. this hook already used `this.parse` to generate an AST for some reason, this hook can optionally return a `{ code, ast, map }` object. The `ast` must be a standard ESTree AST with `start` and `end` properties for each node. If the transformation does not move code, you can preserve existing sourcemaps by setting `map` to `null`. Otherwise you might need to generate the source map. See [the section on source code transformations](#source-code-transformations).
 
@@ -667,14 +677,24 @@ type ModuleInfo = {
   isExternal: boolean; // for external modules that are referenced but not included in the graph
   isIncluded: boolean | null; // is the module included after tree-shaking, `null` if external or not yet available
   importedIds: string[]; // the module ids statically imported by this module
+  importedIdResolutions: ResolvedId[]; // how statically imported ids were resolved, for use with this.load
   importers: string[]; // the ids of all modules that statically import this module
   dynamicallyImportedIds: string[]; // the module ids imported by this module via dynamic import()
+  dynamicallyImportedIdResolutions: ResolvedId[]; // how ids imported via dynamic import() were resolved
   dynamicImporters: string[]; // the ids of all modules that import this module via dynamic import()
   implicitlyLoadedAfterOneOf: string[]; // implicit relationships, declared via this.emitFile
   implicitlyLoadedBefore: string[]; // implicit relationships, declared via this.emitFile
   hasModuleSideEffects: boolean | 'no-treeshake'; // are imports of this module included if nothing is imported from it
   meta: { [plugin: string]: any }; // custom module meta-data
   syntheticNamedExports: boolean | string; // final value of synthetic named exports
+};
+
+type ResolvedId = {
+  id: string; // the id of the imported module
+  external: boolean | 'absolute'; // is this module external, "absolute" means it will not be rendered as relative in the module
+  moduleSideEffects: boolean | 'no-treeshake'; // are side effects of the module observed, is tree-shaking enabled
+  syntheticNamedExports: boolean | string; // does the module allow importing non-existing named exports
+  meta: { [plugin: string]: any }; // custom module meta-data when resolving the module
 };
 ```
 
@@ -696,7 +716,7 @@ Loads and parses the module corresponding to the given id, attaching additional 
 
 This allows you to inspect the final content of modules before deciding how to resolve them in the [`resolveId`](guide/en/#resolveid) hook and e.g. resolve to a proxy module instead. If the module becomes part of the graph later, there is no additional overhead from using this context function as the module will not be parsed again. The signature allows you to directly pass the return value of [`this.resolve`](guide/en/#thisresolve) to this function as long as it is neither `null` nor external.
 
-The returned promise will resolve once the module has been fully transformed and parsed but before any imports have been resolved. That means that the resulting `ModuleInfo` will have empty `importedIds` and `dynamicallyImportedIds`. This helps to avoid deadlock situations when awaiting `this.load` in a `resolveId` hook. If you are interested in `importedIds` and `dynamicallyImportedIds`, you should implement a `moduleParsed` hook.
+The returned promise will resolve once the module has been fully transformed and parsed but before any imports have been resolved. That means that the resulting `ModuleInfo` will have empty `importedIds`, `dynamicallyImportedIds`, `importedIdResolutions` and `dynamicallyImportedIdResolutions`. This helps to avoid deadlock situations when awaiting `this.load` in a `resolveId` hook. If you are interested in `importedIds` and `dynamicallyImportedIds`, you should implement a `moduleParsed` hook.
 
 Note that with regard to the `moduleSideEffects`, `syntheticNamedExports` and `meta` options, the same restrictions apply as for the `resolveId` hook: Their values only have an effect if the module has not been loaded yet. Thus, it is very important to use `this.resolve` first to find out if any plugins want to set special values for these options in their `resolveId` hook, and pass these options on to `this.load` if appropriate. The example below showcases how this can be handled to add a proxy module for modules containing a special code comment:
 
@@ -1055,7 +1075,7 @@ Note the convention that custom options should be added using a property corresp
 
 #### Custom module meta-data
 
-Plugins can annotate modules with custom meta-data which can be accessed by themselves and other plugins via the [`resolveId`](guide/en/#resolveid), [`load`](guide/en/#load), and [`transform`](guide/en/#transform) hooks. This meta-data should always be JSON.stringifyable and will be persisted in the cache e.g. in watch mode.
+Plugins can annotate modules with custom meta-data which can be set by themselves and other plugins via the [`resolveId`](guide/en/#resolveid), [`load`](guide/en/#load), and [`transform`](guide/en/#transform) hooks and accessed via [`this.getModuleInfo`](guide/en/#thisgetmoduleinfo), [`this.load`](guide/en/#thisload) and the [`moduleParsed`](guide/en/#moduleparsed) hook. This meta-data should always be JSON.stringifyable and will be persisted in the cache e.g. in watch mode.
 
 ```js
 function annotatingPlugin() {
@@ -1086,6 +1106,26 @@ function readingPlugin() {
 Note the convention that plugins that add or modify data should use a property corresponding to the plugin name, in this case `annotating`. On the other hand, any plugin can read all meta-data from other plugins via `this.getModuleInfo`.
 
 If several plugins add meta-data or meta-data is added in different hooks, then these `meta` objects will be merged shallowly. That means if plugin `first` adds `{meta: {first: {resolved: "first"}}}` in the resolveId hook and `{meta: {first: {loaded: "first"}}}` in the load hook while plugin `second` adds `{meta: {second: {transformed: "second"}}}` in the `transform` hook, then the resulting `meta` object will be `{first: {loaded: "first"}, second: {transformed: "second"}}`. Here the result of the `resolveId` hook will be overwritten by the result of the `load` hook as the plugin was both storing them under its `first` top-level property. The `transform` data of the other plugin on the other hand will be placed next to it.
+
+The `meta` object of a module is created as soon as Rollup starts loading a module and is updated for each lifecycle hook of the module. If you store a reference to this object, you can also update it manually. To access the meta object of a module that has not been loaded yet, you can trigger its creation and loading the module via [`this.load`](guide/en/#thisload):
+
+```js
+function plugin() {
+  return {
+    name: 'test',
+    buildStart() {
+      // trigger loading a module. We could also pass an initial "meta" object
+      // here, but it would be ignored if the module was already loaded via
+      // other means
+      this.load({ id: 'my-id' });
+      // the module info is now available, we do not need to await this.load
+      const meta = this.getModuleInfo('my-id').meta;
+      // we can also modify meta manually now
+      meta.test = { some: 'data' };
+    }
+  };
+}
+```
 
 #### Direct plugin communication
 
